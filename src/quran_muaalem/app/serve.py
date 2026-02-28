@@ -6,7 +6,8 @@ from typing import (
 )
 
 import httpx
-from fastapi import FastAPI, UploadFile, File, Query, Body, Form, Depends
+from fastapi import FastAPI, UploadFile, File, Query, Body, Form, Depends, status
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from pydantic import Json
 
@@ -471,7 +472,14 @@ async def correct_recitation(
     )
 
     if not search_results:
-        raise ValueError(message or "No results found. Try increasing error_ratio.")
+        return HTTPException(
+            status_code= status.HTTP_404_NOT_FOUND,
+            headers= {"Content-Type": "application/json"},
+
+            detail= message or "No results found. Try increasing error_ratio."
+        )
+
+        # raise ValueError(message or "No results found. Try increasing error_ratio.")
 
     best_result = search_results[0]
 
