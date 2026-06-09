@@ -1,4 +1,5 @@
 import io
+import subprocess
 import time
 from typing import Annotated
 
@@ -65,14 +66,26 @@ class QuranMuaalemAPI(ls.LitAPI):
         self.model.eval()
 
     def decode_request(self, request: Annotated[UploadFile, File()]):
-        # audio_bytes = request  # directly use the bytes
         audio_bytes = request.file.read()
 
+        # Convert any browser format (webm, mp4, ogg) to 16 kHz mono WAV
+        proc = subprocess.run(
+            [
+                "ffmpeg", "-i", "pipe:0",
+                "-f", "wav", "-ar", "16000", "-ac", "1",
+                "-loglevel", "error", "pipe:1",
+            ],
+            input=audio_bytes,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg audio conversion failed: {proc.stderr.decode()}")
+
         audio_array, sr = librosa.load(
-            io.BytesIO(audio_bytes),
+            io.BytesIO(proc.stdout),
             sr=self.sampling_rate,
             mono=True,
-            duration=self.max_audio_seconds,  # Truncating input speech to max_audio_seconds
+            duration=self.max_audio_seconds,
         )
 
         features = self.processor(
