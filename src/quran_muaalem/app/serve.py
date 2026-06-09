@@ -7,6 +7,7 @@ from typing import (
 
 import httpx
 from fastapi import FastAPI, UploadFile, File, Query, Body, Form, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
@@ -112,6 +113,13 @@ These attributes define the recitation rules for the Hafs recitation (حفص).
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 _search_executor: Optional[ThreadPoolExecutor] = None
