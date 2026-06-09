@@ -1,6 +1,6 @@
 # App service — FastAPI REST API (no GPU required)
 #
-# CPU-only torch keeps this image ~1.4 GB lighter than the Engine image.
+# CPU-only torch keeps this image ~2 GB lighter than the engine image.
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,17 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install CPU-only PyTorch first (avoids pulling the 2 GB CUDA build).
-# The App never runs model inference directly — it calls the Engine over HTTP.
+# CPU-only torch — the app never runs inference directly, it calls the engine over HTTP.
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir \
         "torch>=2.7.0" \
         --index-url https://download.pytorch.org/whl/cpu
 
-COPY pyproject.toml README.md ./
+COPY . .
 RUN pip install --no-cache-dir ".[engine]"
-
-COPY src/ ./src/
 
 ENV ENGINE_URL=http://engine:8000/predict
 ENV PORT=8001
