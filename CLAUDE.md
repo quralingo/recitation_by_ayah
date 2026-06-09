@@ -284,7 +284,7 @@ Full RAM budget on a CPU-only instance:
 - **Production sweet spot**: `g4dn.xlarge` spot (~$115/mo). GPU gives 5–8× faster inference at roughly the same monthly cost as a CPU instance on-demand. Worth it once the app has real users.
 - Never use less than 16 GB RAM; 8 GB instances will OOM during peak inference.
 
-**EBS storage**: 40 GB `gp3` (~$3.20/mo) — minimum required by the Deep Learning AMI snapshot. Covers OS (8 GB) + Python deps/torch (2.5 GB) + model cache (1.5 GB) + Docker layers (3 GB) + logs + headroom.
+**EBS storage**: 80 GB `gp3` (~$6.40/mo) — the Deep Learning AMI consumes ~30 GB before any app data. 80 GB provides comfortable headroom for Docker image layers, model cache, and logs.
 
 **CPU-mode env vars** (for `t3.xlarge` / `m6i.xlarge`):
 ```
