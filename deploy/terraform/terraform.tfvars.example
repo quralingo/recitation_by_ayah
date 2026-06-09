@@ -1,0 +1,23 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit actual secrets.
+
+aws_region   = "us-east-1"
+project_name = "quran-muaalem"
+
+# HTTPS clone URL of the repository.
+# Public repo:  https://github.com/quralingo/recitation_by_ayah.git
+# Private repo: https://YOUR_PAT@github.com/quralingo/recitation_by_ayah.git
+repo_url = "https://github.com/quralingo/recitation_by_ayah.git"
+
+# Content of your SSH public key (e.g. cat ~/.ssh/id_ed25519.pub)
+ssh_public_key = "ssh-ed25519 AAAA... your-email@example.com"
+
+# Restrict to your own IP for security: "1.2.3.4/32"
+# Leave as 0.0.0.0/0 only during initial setup, then lock it down.
+ssh_allowed_cidr = "0.0.0.0/0"
+
+# false = on-demand (works immediately). true = spot (needs quota approval for new accounts).
+use_spot = false
+
+# Max hourly Spot bid. g4dn.xlarge on-demand ~$0.526/hr, spot ~$0.16/hr.
+spot_max_price = "0.25"

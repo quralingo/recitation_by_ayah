@@ -1,0 +1,55 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    # Skip deployment for documentation-only changes
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/workflows/deploy-docs.yml"
+      - ".github/workflows/tests.yml"
+
+# Prevent concurrent deployments. A second push waits for the first deploy to
+# finish rather than cancelling it (cancelling mid-deploy would leave the
+# server in a broken state).
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          # Give enough time for docker build (PyTorch layers are cached after first deploy)
+          command_timeout: 12m
+          script: |
+            set -e
+            cd /app
+
+            echo "==> Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Rebuilding images..."
+            docker compose build
+
+            echo "==> Restarting services..."
+            docker compose up -d --remove-orphans
+
+            echo "==> Waiting for App health check..."
+            timeout 60 bash -c \
+              'until curl -sf http://localhost:8001/health; do echo "waiting..."; sleep 5; done'
+
+            echo ""
+            echo "Deployment complete."
+            docker compose ps

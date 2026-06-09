@@ -1,0 +1,56 @@
+# Engine service — Wav2Vec2-BERT inference with T4 GPU
+#
+# Base image: CUDA 12.4 runtime (matches the AWS Deep Learning AMI driver version).
+# Python is installed separately so we can pin the version.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 python3.11-pip python3.11-dev \
+        ffmpeg libsndfile1 portaudio19-dev \
+        curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make python3.11 the default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+WORKDIR /app
+
+# Install PyTorch with CUDA 12.4 support FIRST so it lands in its own layer.
+# This layer is only invalidated when the torch version requirement changes,
+# not on every code change.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+        "torch>=2.7.0" \
+        --index-url https://download.pytorch.org/whl/cu124
+
+# Copy package metadata and install remaining dependencies.
+# Keep this before COPY src/ so the dep layer is cached independently of code.
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir ".[engine]"
+
+# Copy source code last (most frequently changed layer)
+COPY src/ ./src/
+
+# Model weights are downloaded from HuggingFace on first start and cached in
+# the huggingface_cache Docker volume. This avoids a 1.4 GB image bloat while
+# keeping cold-start download to a one-time cost.
+ENV HUGGINGFACE_HUB_CACHE=/cache/huggingface
+ENV HF_HOME=/cache/huggingface
+
+# Production defaults — override via .env or docker-compose environment:
+ENV ACCELERATOR=cuda
+ENV DTYPE=bfloat16
+ENV MAX_BATCH_SIZE=128
+ENV WORKERS_PER_DEVICE=1
+ENV PORT=8000
+ENV HOST=0.0.0.0
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["quran-muaalem-engine"]

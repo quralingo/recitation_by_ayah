@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "ai-engineer@awesome-claude-code-plugins": true,
+    "data-engineering@claude-plugins-official": true
+  }
+}

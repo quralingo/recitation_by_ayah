@@ -809,3 +809,92 @@ This documentation includes:
 - Interactive examples for each endpoint
 - Complete response schemas
 - Direct execution capability from the browser
+
+---
+
+## AWS EC2 Deployment
+
+The system runs as two processes. Only the App (port 8001) is exposed publicly; the Engine (port 8000) stays internal.
+
+```
+Internet → HTTPS :443 → nginx → App :8001 → Engine :8000 (localhost only)
+```
+
+### Instance Sizing
+
+The model has 660M parameters and requires **1.5 GB GPU VRAM** (bfloat16) or ~9 GB peak system RAM (float32 on CPU). Minimum 16 GB RAM on any instance.
+
+| Instance | vCPU | RAM | GPU | On-demand/mo | Spot/mo | Latency |
+|---|---|---|---|---|---|---|
+| `t3.xlarge` | 4 | 16 GB | — | ~$121 | ~$36 | 8–15 s |
+| `m6i.xlarge` | 4 | 16 GB | — | ~$140 | ~$42 | 4–8 s |
+| `m7i.xlarge` | 4 | 16 GB | — | ~$148 | ~$45 | 3–6 s |
+| `g4dn.xlarge` | 4 | 16 GB | T4 16 GB | ~$383 | ~$115 | 1–2 s |
+
+**Recommended choices:**
+- **Beta / low traffic**: `t3.xlarge` spot (~$36/mo) — acceptable for a record-then-submit mobile flow.
+- **Production**: `g4dn.xlarge` spot (~$115/mo) — GPU gives 5–8× faster inference at the same cost as a CPU instance on-demand.
+
+**EBS**: 25 GB `gp3` (~$2/mo) is sufficient.
+
+### Environment Variables for EC2
+
+**CPU instance** (`t3.xlarge`, `m6i.xlarge`, `m7i.xlarge`):
+```bash
+# Engine
+DTYPE=float32
+ACCELERATOR=cpu
+MAX_BATCH_SIZE=8
+WORKERS_PER_DEVICE=2
+PORT=8000
+HOST=127.0.0.1   # bind to localhost only
+
+# App
+ENGINE_URL=http://localhost:8000/predict
+PORT=8001
+HOST=0.0.0.0
+```
+
+**GPU instance** (`g4dn.xlarge`):
+```bash
+# Engine
+DTYPE=bfloat16
+ACCELERATOR=cuda
+MAX_BATCH_SIZE=128
+WORKERS_PER_DEVICE=1
+PORT=8000
+HOST=127.0.0.1
+
+# App
+ENGINE_URL=http://localhost:8000/predict
+PORT=8001
+HOST=0.0.0.0
+```
+
+### System Dependencies (Ubuntu 22.04)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg libsndfile1 portaudio19-dev
+```
+
+### Running on EC2
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install
+git clone https://github.com/obadx/quran-muaalem.git
+cd quran-muaalem
+uv sync --extra engine
+
+# Start Engine (terminal 1 / systemd service)
+ACCELERATOR=cpu DTYPE=float32 uv run quran-muaalem-engine
+
+# Start App (terminal 2 / systemd service)
+ENGINE_URL=http://localhost:8000/predict uv run quran-muaalem-app
+
+# Health check
+curl http://localhost:8001/health
+```
