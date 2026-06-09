@@ -8,7 +8,7 @@ set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
 INSTANCE_NAME="quran-muaalem"
-AWS_REGION="us-east-1"
+AWS_REGION="eu-central-1"
 HEALTH_URL="https://recite-ayah.quranlingo.app/health"
 HEALTH_TIMEOUT=180   # seconds to wait for the app to become healthy after start
 # ─────────────────────────────────────────────────────────────────────────────

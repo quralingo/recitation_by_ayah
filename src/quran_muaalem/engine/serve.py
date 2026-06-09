@@ -88,12 +88,15 @@ class QuranMuaalemAPI(ls.LitAPI):
             duration=self.max_audio_seconds,
         )
 
+        actual_frames = int(np.ceil((len(audio_array) - 400) / (160 * 2)))
+        actual_frames = max(1, min(actual_frames, self.max_features))
+
         features = self.processor(
             audio_array,
             sampling_rate=sr,
             return_tensors="pt",
             padding="max_length",
-            max_length=self.max_features,
+            max_length=actual_frames,
         )
 
         return {
