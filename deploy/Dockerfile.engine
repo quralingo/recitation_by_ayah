@@ -17,7 +17,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir \
         "torch>=2.7.0" \
-        --index-url https://download.pytorch.org/whl/cu124
+        --index-url https://download.pytorch.org/whl/cu126
 
 # Copy source then install the remaining package deps.
 # torch is already satisfied above, so this step is fast on rebuilds.
