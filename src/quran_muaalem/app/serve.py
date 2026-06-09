@@ -26,10 +26,10 @@ from .types import (
     SearchResultResponse,
     CorrectRecitationResponse,
     CorrectRecitationNoMatchResponse,
-    ReciterErrorResponse,
     PhonemesSearchSpanApp,
-    TajweedRuleApp,
-    TajweedRuleNameApp,
+    WordAnalysis,
+    WordError,
+    TajweedRuleInfo,
     TranscriptResponse,
     correct_recitation_form_dependency,
 )
@@ -144,13 +144,26 @@ def get_phonetic_search() -> PhoneticSearch:
     return _phonetic_search
 
 
-def tajweed_rule_to_app(rule) -> TajweedRuleApp:
-    return TajweedRuleApp(
-        name=TajweedRuleNameApp(ar=rule.name.ar, en=rule.name.en),
-        golden_len=rule.golden_len,
-        correctness_type=rule.correctness_type,
-        tag=rule.tag,
-    )
+def _build_word_char_ranges(uthmani_text: str) -> list[tuple[int, int]]:
+    ranges = []
+    offset = 0
+    for word in uthmani_text.split(" "):
+        ranges.append((offset, offset + len(word)))
+        offset += len(word) + 1
+    return ranges
+
+
+def _error_to_word_idx(
+    uthmani_pos: tuple[int, int], word_ranges: list[tuple[int, int]]
+) -> int:
+    pos = uthmani_pos[0]
+    for i, (start, end) in enumerate(word_ranges):
+        if start <= pos < end:
+            return i
+    for i, (start, end) in enumerate(word_ranges):
+        if pos <= end:
+            return i
+    return len(word_ranges) - 1
 
 
 async def call_engine_predict(audio_file: UploadFile) -> str:
@@ -201,7 +214,7 @@ def run_phonetization_and_error(
     uthmani_text: str,
     moshaf: MoshafAttributes,
     predicted_phonemes: str,
-) -> tuple[str, list[ReciterErrorResponse]]:
+) -> tuple[str, list[WordAnalysis]]:
     ref_phonetization = quran_phonetizer(uthmani_text, moshaf, remove_spaces=True)
 
     errors = explain_error(
@@ -211,42 +224,44 @@ def run_phonetization_and_error(
         mappings=ref_phonetization.mappings,
     )
 
-    error_responses = []
+    words_text = uthmani_text.split(" ")
+    word_ranges = _build_word_char_ranges(uthmani_text)
+
+    word_analyses: dict[int, WordAnalysis] = {
+        i: WordAnalysis(word=word, word_idx=i, status="correct", errors=[])
+        for i, word in enumerate(words_text)
+    }
+
     for err in errors:
-        error_responses.append(
-            ReciterErrorResponse(
-                uthmani_pos=err.uthmani_pos,
-                ph_pos=err.ph_pos,
-                error_type=err.error_type,
-                speech_error_type=err.speech_error_type,
-                expected_ph=err.expected_ph,
-                preditected_ph=err.preditected_ph,
-                expected_len=err.expected_len,
-                predicted_len=err.predicted_len,
-                ref_tajweed_rules=[
-                    tajweed_rule_to_app(r) for r in err.ref_tajweed_rules
-                ]
-                if err.ref_tajweed_rules
-                else None,
-                inserted_tajweed_rules=[
-                    tajweed_rule_to_app(r) for r in err.inserted_tajweed_rules
-                ]
-                if err.inserted_tajweed_rules
-                else None,
-                replaced_tajweed_rules=[
-                    tajweed_rule_to_app(r) for r in err.replaced_tajweed_rules
-                ]
-                if err.replaced_tajweed_rules
-                else None,
-                missing_tajweed_rules=[
-                    tajweed_rule_to_app(r) for r in err.missing_tajweed_rules
-                ]
-                if err.missing_tajweed_rules
-                else None,
+        word_idx = _error_to_word_idx(err.uthmani_pos, word_ranges)
+
+        error_type = "pronunciation" if err.error_type == "normal" else err.error_type
+
+        tajweed_rules = None
+        if err.ref_tajweed_rules:
+            tajweed_rules = [
+                TajweedRuleInfo(
+                    name_ar=r.name.ar,
+                    name_en=r.name.en,
+                    expected_count=r.golden_len if r.correctness_type == "count" else None,
+                    said_count=err.predicted_len if r.correctness_type == "count" else None,
+                    tag=r.tag,
+                )
+                for r in err.ref_tajweed_rules
+            ]
+
+        word_analyses[word_idx].errors.append(
+            WordError(
+                error_type=error_type,
+                speech_error=err.speech_error_type,
+                expected=err.expected_ph,
+                said=err.preditected_ph,
+                tajweed_rules=tajweed_rules,
             )
         )
+        word_analyses[word_idx].status = "error"
 
-    return ref_phonetization.phonemes, error_responses
+    return ref_phonetization.phonemes, list(word_analyses.values())
 
 
 @app.get(
@@ -490,7 +505,7 @@ async def correct_recitation(
 
     best_result = search_results[0]
 
-    reference_phonemes, errors = await loop.run_in_executor(
+    reference_phonemes, words = await loop.run_in_executor(
         get_phonetization_executor(),
         run_phonetization_and_error,
         best_result.uthmani_text,
@@ -499,12 +514,12 @@ async def correct_recitation(
     )
 
     return CorrectRecitationResponse(
-        start=best_result.start,
-        end=best_result.end,
+        sura_idx=best_result.start.sura_idx,
+        aya_idx=best_result.start.aya_idx,
         predicted_phonemes=predicted_phonemes,
         reference_phonemes=reference_phonemes,
         uthmani_text=best_result.uthmani_text,
-        errors=errors,
+        words=words,
     )
 
 

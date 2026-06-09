@@ -83,55 +83,77 @@ class TranscriptResponse(BaseModel):
     )
 
 
-class ReciterErrorResponse(BaseModel):
-    """Error in recitation analysis."""
+class TajweedRuleInfo(BaseModel):
+    """A tajweed rule attached to a word-level error."""
 
-    uthmani_pos: tuple[int, int] = Field(
-        description="Position in Uthmani text (start, end)"
+    name_ar: str = Field(description="Arabic name of the rule")
+    name_en: str = Field(description="English name of the rule")
+    expected_count: Optional[int] = Field(
+        default=None,
+        description="How many counts the rule requires (e.g. 4 for a 4-count madd)",
     )
-    ph_pos: tuple[int, int] = Field(description="Position in phoneme text (start, end)")
-    error_type: Literal["tajweed", "normal", "tashkeel"] = Field(
-        description="Type of error: tajweed, normal, or tashkeel"
+    said_count: Optional[int] = Field(
+        default=None, description="How many counts the reciter actually said"
     )
-    speech_error_type: Literal["insert", "delete", "replace"] = Field(
-        description="Type of speech error"
+    tag: Optional[str] = Field(
+        default=None, description="Rule sub-type tag (e.g. 'alif', 'waw')"
     )
-    expected_ph: str = Field(description="Expected phonetic text")
-    preditected_ph: str = Field(description="Predicted phonetic text")
-    expected_len: Optional[int] = Field(
-        default=None, description="Expected length (for madd errors)"
+
+
+class WordError(BaseModel):
+    """A single error on a specific word in the verse."""
+
+    error_type: Literal["tajweed", "pronunciation", "tashkeel"] = Field(
+        description=(
+            "tajweed: a tajweed rule was violated (see tajweed_rules), "
+            "pronunciation: wrong consonant or sound, "
+            "tashkeel: wrong short vowel (haraka)"
+        )
     )
-    predicted_len: Optional[int] = Field(
-        default=None, description="Predicted length (for madd errors)"
+    speech_error: Literal["insert", "delete", "replace"] = Field(
+        description=(
+            "insert: an extra sound was added, "
+            "delete: a required sound was omitted, "
+            "replace: the correct sound was replaced with a wrong one"
+        )
     )
-    ref_tajweed_rules: Optional[list[TajweedRuleApp]] = Field(
-        default=None, description="Reference Tajweed rules"
+    expected: str = Field(description="The correct phonemes expected at this position")
+    said: str = Field(
+        description="The phonemes the reciter actually produced (empty for delete errors)"
     )
-    inserted_tajweed_rules: Optional[list[TajweedRuleApp]] = Field(
-        default=None, description="Inserted Tajweed rules"
+    tajweed_rules: Optional[list[TajweedRuleInfo]] = Field(
+        default=None,
+        description="Violated tajweed rules — only populated for tajweed errors",
     )
-    replaced_tajweed_rules: Optional[list[TajweedRuleApp]] = Field(
-        default=None, description="Replaced Tajweed rules"
+
+
+class WordAnalysis(BaseModel):
+    """Analysis result for a single word in the verse."""
+
+    word: str = Field(description="Uthmani text of this word")
+    word_idx: int = Field(description="0-based position of this word within the verse")
+    status: Literal["correct", "error"] = Field(
+        description="correct if recited without errors, error if any errors were found"
     )
-    missing_tajweed_rules: Optional[list[TajweedRuleApp]] = Field(
-        default=None, description="Missing Tajweed rules"
+    errors: list[WordError] = Field(
+        description="All errors found on this word (empty list when status is correct)"
     )
 
 
 class CorrectRecitationResponse(BaseModel):
-    """Response from the correct-recitation endpoint."""
+    """Response from /correct-recitation — word-centric format."""
 
-    start: PhonemesSearchSpanApp = Field(description="Start position of the match")
-    end: PhonemesSearchSpanApp = Field(
-        description="End position of the match (exclusive)"
+    sura_idx: int = Field(description="0-based sura index of the matched verse")
+    aya_idx: int = Field(description="0-based aya index within the sura")
+    uthmani_text: str = Field(description="Uthmani text of the matched verse span")
+    words: list[WordAnalysis] = Field(
+        description="Per-word breakdown: each word shows its status and any errors"
     )
-    predicted_phonemes: str = Field(description="Phonetic text from audio prediction")
+    predicted_phonemes: str = Field(
+        description="Raw phonemes transcribed from the audio (useful for debugging)"
+    )
     reference_phonemes: str = Field(
-        description="Reference phonetic text from Uthmani using MoshafAttributes"
-    )
-    uthmani_text: str = Field(description="Matched Uthmani text snippet")
-    errors: list[ReciterErrorResponse] = Field(
-        description="List of recitation errors found"
+        description="Correct reference phonemes for the matched span (useful for debugging)"
     )
 
 
